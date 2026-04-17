@@ -1,0 +1,11 @@
+# gasoline operator config
+listen: 0.0.0.0:51820
+transport: quic
+vni:
+  default: 100
+  watch: /etc/gasoline/vni/
+auth:
+  keyring: /etc/gasoline/auth.keys
+reload:
+  fswatch: true
+  sigreload: false

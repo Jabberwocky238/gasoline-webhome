@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict'
 import { makeShell } from '../shell'
 import { runLine } from '../registry'
+import { complete } from '../complete'
 import { USERS } from '../../fs/vfs'
 import '../cmds'
 
@@ -385,6 +386,185 @@ test('multi-line script with && chain and $VAR', async () => {
   const text = strip(r.text)
   assert.match(text, /hello gasoline/)
   assert.match(text, /ok/)
+})
+
+// ---------------- completion ----------------
+
+test('TAB completes unique command', () => {
+  const sh = makeShell()
+  const r = complete(sh, 'neof', 4)
+  assert.equal(r.newLine, 'neofetch ')
+  assert.equal(r.newCursor, 9)
+})
+
+test('TAB extends common prefix of multiple cmds', () => {
+  const sh = makeShell()
+  const r = complete(sh, 'gr', 2)
+  // both 'grep' and 'groups' share 'gr' — nothing to extend, list returned
+  assert.ok(r.list && r.list.includes('grep') && r.list.includes('groups'))
+  assert.equal(r.newLine, 'gr')
+})
+
+test('TAB completes a file in command-arg position', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'touch compleme.txt')
+  const line = 'cat compl'
+  const r = complete(sh, line, line.length)
+  assert.equal(r.newLine, 'cat compleme.txt ')
+  assert.equal(r.newCursor, 'cat compleme.txt '.length)
+})
+
+test('TAB on directory keeps trailing slash, no space', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /')
+  const line = 'cd tm'
+  const r = complete(sh, line, line.length)
+  assert.equal(r.newLine, 'cd tmp/')
+  assert.equal(r.newCursor, 'cd tmp/'.length)
+})
+
+test('TAB in command position after a pipe', () => {
+  const sh = makeShell()
+  const line = 'ls | ec'
+  const r = complete(sh, line, line.length)
+  assert.equal(r.newLine, 'ls | echo ')
+})
+
+test('TAB on nothing-match is a no-op', () => {
+  const sh = makeShell()
+  const r = complete(sh, 'xyz__no_such', 12)
+  assert.equal(r.newLine, 'xyz__no_such')
+  assert.equal(r.newCursor, 12)
+  assert.equal(r.list, undefined)
+})
+
+// ---------------- ll / home perms ----------------
+
+test('ll shows . and .. (via alias from .bashrc)', async () => {
+  const sh = makeShell()
+  // In the real shell this alias comes from ~/.bashrc; tests start from a
+  // clean shell so we stand it up explicitly.
+  sh.aliases.ll = 'ls -la'
+  const r = await run('ll', sh)
+  assert.match(r.text, /\s\.\s/)
+  assert.match(r.text, /\s\.\.\s/)
+})
+
+test('visitor can touch in their own /home/visitor', async () => {
+  const sh = makeShell()
+  const r = await run('touch aa.sh', sh)
+  assert.equal(r.text, '')
+  const r2 = await run('ls aa.sh', sh)
+  assert.match(r2.text, /aa\.sh/)
+})
+
+// ---------------- hostname ----------------
+
+test('uname -a uses gasoline.network as hostname', async () => {
+  const r = await run('uname -a')
+  assert.match(r.text, /gasoline\.network/)
+})
+
+// ---------------- symlinks + hard links ----------------
+
+test('/usr/bin is a symlink to /bin', async () => {
+  const r = await run('ls -l /usr')
+  assert.match(r.text, /lrwxrwxrwx.*bin -> \/bin/)
+})
+
+test('ls /usr/bin lists /bin contents via symlink', async () => {
+  const r = await run('ls /usr/bin')
+  assert.match(r.text, /ls/)
+  assert.match(r.text, /grep/)
+})
+
+test('ln -s creates symlink, cat follows', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'echo hi > real.txt')
+  await runLine(sh, 'ln -s real.txt slink.txt')
+  const r = await run('cat slink.txt', sh)
+  assert.equal(strip(r.text), 'hi\n')
+})
+
+test('ls -l on a symlink shows the target arrow', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'echo hi > target.txt')
+  await runLine(sh, 'ln -s target.txt mylink')
+  const r = await run('ls -l /tmp', sh)
+  assert.match(strip(r.text), /l[rwx-]{9}.*mylink.* -> target\.txt/)
+})
+
+test('rm on a symlink removes only the link', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'echo a > origin.txt')
+  await runLine(sh, 'ln -s origin.txt gone.link')
+  await runLine(sh, 'rm gone.link')
+  const r1 = await run('ls gone.link', sh)
+  assert.match(r1.text, /No such file/)
+  const r2 = await run('cat origin.txt', sh)
+  assert.equal(strip(r2.text), 'a\n')
+})
+
+test('hard link shares content with original', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'echo one > a.txt')
+  await runLine(sh, 'ln a.txt b.txt')
+  // Mutate via one name, read via the other.
+  await runLine(sh, 'echo two > a.txt')
+  const r = await run('cat b.txt', sh)
+  assert.equal(strip(r.text), 'two\n')
+})
+
+test('hard link chmod propagates', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'touch hl_src')
+  await runLine(sh, 'ln hl_src hl_copy')
+  await runLine(sh, 'chmod 700 hl_src')
+  const r = await run('ls -l hl_copy', sh)
+  assert.match(strip(r.text), /-rwx------/)
+})
+
+test('hard link to a directory is refused', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'mkdir hl_dir')
+  const r = await run('ln hl_dir hl_dir_link', sh)
+  assert.match(r.text, /Operation not permitted|Is a directory/)
+})
+
+test('symlink loop surfaces as ENOENT (max-hops guard)', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'ln -s loopA loopB')
+  await runLine(sh, 'ln -s loopB loopA')
+  const r = await run('cat loopA', sh)
+  assert.match(r.text, /No such file/)
+})
+
+test('ls -l alignment: columns pad to widest user/group/size', async () => {
+  const sh = makeShell()
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, 'touch short.txt')
+  const r = await run('ls -l', sh)
+  const lines = strip(r.text).split('\n').filter((l) => l.trim())
+  // Every row should contain at least 6 whitespace-separated columns
+  // before the filename, aligned to the same vertical offsets.
+  const nameStarts = lines.map((l) => {
+    // find the filename anchor — it's the last space-separated field
+    // once we strip trailing content. A cheap proxy: look for mtime pattern
+    // (YYYY-MM-DD HH:MM) and take the char after.
+    const m = l.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} /)
+    return m ? m.index! + m[0].length : -1
+  })
+  // All non-negative starts should be identical (columns align).
+  const set = new Set(nameStarts.filter((n) => n > 0))
+  assert.equal(set.size, 1, `alignment broken: starts=${[...set].join(',')}`)
 })
 
 // ---------------- runner ----------------

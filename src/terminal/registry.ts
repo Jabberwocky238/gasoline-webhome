@@ -32,6 +32,7 @@ import {
   VfsError,
   errnoPhrase,
 } from '../fs/vfs'
+import { runGasoline } from './gasoline-sim'
 
 // A command is an async function over Ctx. Commands live in cmds/*.ts.
 export type CommandFn = (ctx: Ctx) => Promise<void> | void
@@ -47,7 +48,37 @@ export function registerAliases(src: string, aliases: string[]) {
   for (const a of aliases) TABLE.set(a, fn)
 }
 export function getCommand(name: string): CommandFn | undefined {
-  return TABLE.get(name)
+  return TABLE.get(name) ?? TABLE.get(name.toLowerCase())
+}
+export function listCommands(): string[] {
+  return Array.from(TABLE.keys())
+}
+
+// Split an alias's replacement body into tokens the way the shell would see
+// them at argv[0]. We use a light splitter (whitespace + single/double quote
+// grouping) — alias values aren't expected to contain pipes/redirects.
+export function tokenizeAlias(value: string): string[] {
+  const out: string[] = []
+  let buf = ''
+  let quote: '' | "'" | '"' = ''
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i]
+    if (quote) {
+      if (c === quote) { quote = '' }
+      else if (c === '\\' && quote === '"' && i + 1 < value.length) { buf += value[++i] }
+      else buf += c
+      continue
+    }
+    if (c === "'" || c === '"') { quote = c; continue }
+    if (c === ' ' || c === '\t') {
+      if (buf) { out.push(buf); buf = '' }
+      continue
+    }
+    if (c === '\\' && i + 1 < value.length) { buf += value[++i]; continue }
+    buf += c
+  }
+  if (buf) out.push(buf)
+  return out
 }
 
 // ---------------- exec dispatch ----------------
@@ -67,8 +98,13 @@ export async function runExec(sh: Shell, path: string, args: string[]): Promise<
   if ((node.mode & 0o111) === 0) {
     return { out: errLine('bash', path, 'Permission denied') + '\n', status: 126 }
   }
-  // Linux-only release binaries: friendly platform message.
+  // Linux-only release binaries: try to parse config first so we surface
+  // the *specific* error (bad flag / bad YAML) before falling back to a
+  // generic platform-mismatch message.
   if (node.extPlatform) {
+    if (/^gasoline(-linux-\w+)?$/.test(node.name) || node.name.startsWith('gasoline-')) {
+      return runGasoline(sh, args)
+    }
     const NL = '\n'
     const url = node.url ?? ''
     return {
@@ -91,22 +127,38 @@ export async function runExec(sh: Shell, path: string, args: string[]): Promise<
   return runScript(sh, text, [path, ...args])
 }
 
+export interface ScriptOptions {
+  // Whether `reboot` is permitted inside this script. Only .bashrc gets true.
+  allowReboot?: boolean
+}
+
+// Delay inserted when a script invokes another script, to give the tab time
+// to paint. Inner commands themselves run without throttle.
+const NESTED_SCRIPT_DELAY_MS = 50
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 // runScript: walk each logical line, run it, accumulate output. `positional`
 // is argv as seen from within the script (so $0 is the script name, $1 etc).
 export async function runScript(
   sh: Shell,
   source: string,
   positional: string[],
+  options: ScriptOptions = {},
 ): Promise<{ out: string; status: number }> {
-  // Join \<newline> into one logical line per the parser's own rule, but we
-  // still need to split on \n for script execution.
   const joined = source.replace(/\\\r?\n/g, '')
   const lines = joined.split('\n')
   let out = ''
   let status = 0
-  // Push positional params; restore at end.
   const saved = { ...sh.env }
   positional.forEach((p, idx) => { sh.env[String(idx)] = p })
+  // A nested script (script calling script) pauses 50ms at entry so rapid
+  // chains don't starve the browser event loop.
+  const isNested = sh.scriptDepth > 0
+  sh.scriptDepth++
+  const prevAllow = sh.allowReboot
+  sh.allowReboot = options.allowReboot ?? false
+  if (isNested) await sleep(NESTED_SCRIPT_DELAY_MS)
   try {
     for (const raw of lines) {
       const line = raw.replace(/^\s+|\s+$/g, '')
@@ -116,7 +168,8 @@ export async function runScript(
       status = r.status
     }
   } finally {
-    // only restore the numeric slots we set — user exports should persist
+    sh.scriptDepth--
+    sh.allowReboot = prevAllow
     for (let i = 0; i < positional.length; i++) {
       if (saved[String(i)] === undefined) delete sh.env[String(i)]
       else sh.env[String(i)] = saved[String(i)]
@@ -203,6 +256,16 @@ async function runSimple(
     for (const w of cmd.words) argv.push(...(await expandWord(sh, w, positional)))
     if (argv.length === 0) return { stdout: '', stderr: '', status: 0 }
 
+    // Alias substitution on argv[0]. Recursive with cycle guard so that
+    // `alias ls='ls --color'` doesn't loop.
+    const seen = new Set<string>()
+    while (sh.aliases[argv[0]] && !seen.has(argv[0])) {
+      seen.add(argv[0])
+      const expanded = tokenizeAlias(sh.aliases[argv[0]])
+      if (expanded.length === 0) break
+      argv.splice(0, 1, ...expanded)
+    }
+
     // Handle input redirect first — it replaces stdin.
     let effectiveStdin = stdin
     for (const r of cmd.redirects) {
@@ -230,7 +293,7 @@ async function runSimple(
       stdoutBuf = r.out
       status = r.status
     } else {
-      const fn = TABLE.get(name)
+      const fn = getCommand(name)
       if (!fn) {
         stderrBuf = `${C.red}${name}: command not found${C.reset}\n`
         status = 127

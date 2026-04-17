@@ -5,7 +5,7 @@ export default function neofetch(ctx: Ctx): void {
   const agent = typeof navigator !== 'undefined' ? navigator.userAgent.split(' ')[0] : 'tsx'
   const user = ctx.user.name
   const lines = [
-    `${C.magenta}       .--------.${C.reset}     ${C.bold}${user}${C.reset}@${C.bold}gasoline${C.reset}`,
+    `${C.magenta}       .--------.${C.reset}     ${C.bold}${user}${C.reset}@${C.bold}gasoline.network${C.reset}`,
     `${C.magenta}      /          \\${C.reset}    ${C.dim}---------------${C.reset}`,
     `${C.magenta}     |   gasoline |${C.reset}   ${C.cyan}OS${C.reset}:        Gasoline 1.0.0-webhome`,
     `${C.magenta}      \\          /${C.reset}    ${C.cyan}Kernel${C.reset}:    userspace-vxlan`,

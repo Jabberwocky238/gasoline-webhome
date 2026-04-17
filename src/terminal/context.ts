@@ -34,6 +34,11 @@ export interface Ctx {
   reportVfs: (e: unknown, target: string) => number
   // generic "cmd: target: phrase" line
   err: (target: string, phrase: string) => void
+  // true when this command is being run inside a script (bashrc/profile/.sh)
+  script: boolean
+  // Ask the user a question synchronously-ish (resolves on next submitted line).
+  // Flushes `promptText` straight to the terminal — bypasses the stdout buffer.
+  ask: (promptText: string) => Promise<string>
 }
 
 // Factory — given a shell + io wiring, produce a Ctx for one command run.
@@ -70,6 +75,15 @@ export function makeCtx(params: {
     err: (target, phrase) => {
       stderr(errLine(name, target, phrase) + '\n')
       ctx.exitCode = 1
+    },
+    script: shell.scriptDepth > 0,
+    ask: (promptText) => {
+      // Flush directly to the terminal so the user sees the question before
+      // the runLine promise settles.
+      shell.writeTerm?.(promptText.replace(/\n/g, '\r\n'))
+      return new Promise<string>((resolve) => {
+        shell.pendingPrompt = { resolve }
+      })
     },
   }
   return ctx

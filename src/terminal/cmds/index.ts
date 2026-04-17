@@ -35,6 +35,21 @@ import grep from './grep'
 import sed from './sed'
 import man from './man'
 import bash from './bash'
+import ln from './ln'
+import scp from './scp'
+import alias from './alias'
+import unalias from './unalias'
+import reboot from './reboot'
+import curl from './curl'
+import sudo from './sudo'
+import ssh from './ssh'
+import useradd from './useradd'
+import userdel from './userdel'
+import groupadd from './groupadd'
+import groupdel from './groupdel'
+import passwd from './passwd'
+import systemctl from './systemctl'
+import ifconfig from './ifconfig'
 
 registerCommand('echo', echo)
 registerCommand('pwd', pwd)
@@ -75,6 +90,21 @@ registerCommand('sed', sed)
 registerCommand('man', man)
 registerCommand('bash', bash)
 registerAliases('bash', ['sh'])
+registerCommand('ln', ln)
+registerCommand('scp', scp)
+registerCommand('alias', alias)
+registerCommand('unalias', unalias)
+registerCommand('reboot', reboot)
+registerCommand('curl', curl)
+registerCommand('sudo', sudo)
+registerCommand('ssh', ssh)
+registerCommand('useradd', useradd)
+registerCommand('userdel', userdel)
+registerCommand('groupadd', groupadd)
+registerCommand('groupdel', groupdel)
+registerCommand('passwd', passwd)
+registerCommand('systemctl', systemctl)
+registerCommand('ifconfig', ifconfig)
 
-// ll is just 'ls -l' — register as a thin wrapper so args keep flowing.
-registerCommand('ll', (ctx) => ls({ ...ctx, args: [...ctx.args, '-l'] }))
+// `ll` is NOT registered as a command — it lives as an alias in .bashrc
+// (`alias ll='ls -la'`). Aliases are expanded by runSimple before dispatch.

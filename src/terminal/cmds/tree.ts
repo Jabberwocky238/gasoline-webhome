@@ -11,7 +11,10 @@ export default function tree(ctx: Ctx): void {
 }
 
 function render(node: VNode, prefix: string): string {
-  if (node.kind === 'file') return node.name
+  if (node.kind !== 'dir') {
+    if (node.kind === 'symlink') return `${node.name} -> ${node.target}`
+    return node.name
+  }
   const lines: string[] = [`${C.blue}${C.bold}${node.name}${C.reset}`]
   const kids = node.children
   kids.forEach((c, i) => {
@@ -22,6 +25,8 @@ function render(node: VNode, prefix: string): string {
       const nested = render(c, prefix + sub).split('\n')
       lines.push(prefix + branch + nested[0])
       for (let j = 1; j < nested.length; j++) lines.push(prefix + sub + nested[j].slice((prefix + sub).length))
+    } else if (c.kind === 'symlink') {
+      lines.push(prefix + branch + `${C.cyan}${c.name}${C.reset} -> ${c.target}`)
     } else {
       lines.push(prefix + branch + c.name)
     }
