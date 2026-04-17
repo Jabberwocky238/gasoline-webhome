@@ -567,6 +567,18 @@ test('ls -l alignment: columns pad to widest user/group/size', async () => {
   assert.equal(set.size, 1, `alignment broken: starts=${[...set].join(',')}`)
 })
 
+// ---------------- alias name permissiveness ----------------
+
+test('alias ..=cd .. is accepted (bash-style name)', async () => {
+  const sh = makeShell()
+  const r = await run("alias ..='cd ..'", sh)
+  assert.equal(r.text, '')
+  assert.equal(sh.aliases['..'], 'cd ..')
+  await runLine(sh, 'cd /tmp')
+  await runLine(sh, '..')
+  assert.deepEqual(sh.cwd, [])
+})
+
 // ---------------- runner ----------------
 
 let failures = 0

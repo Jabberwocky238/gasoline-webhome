@@ -312,7 +312,7 @@ function makeTreeChildren(): VNode[] {
     makeFile('gasoline', newInode({
       uid: 0, gid: 0, mode: 0o755, size: 28_456_912,
       mtime: '2026-04-01 09:00',
-      url: 'https://github.com/Jabberwocky238/gasoline/releases/download/Beta0.1.0/gasoline-linux-amd64',
+      url: 'https://raw.githubusercontent.com/Jabberwocky238/gasoline/main/bin/gasoline-linux-amd64',
       extPlatform: true,
     })),
     makeFile('systemd', newInode({
@@ -393,9 +393,9 @@ function visitorHome(): VNode[] {
     f('hello.sh',         PUB_HELLO,               380),
     f('about.txt',        `${P}/about.txt`,        700),
     x('gasoline-linux-amd64', 28_456_912,
-      'https://github.com/Jabberwocky238/gasoline/releases/download/Beta0.1.0/gasoline-linux-amd64'),
+      'https://raw.githubusercontent.com/Jabberwocky238/gasoline/main/bin/gasoline-linux-amd64'),
     x('gasoline-linux-arm64', 28_102_432,
-      'https://github.com/Jabberwocky238/gasoline/releases/download/Beta0.1.0/gasoline-linux-arm64'),
+      'https://raw.githubusercontent.com/Jabberwocky238/gasoline/main/bin/gasoline-linux-arm64'),
     d('transport', [
       f('udp.md',  `${P}/transport/udp.md`,  620),
       f('tcp.md',  `${P}/transport/tcp.md`,  520),
@@ -434,9 +434,9 @@ export const ROOT: VDir = d('/', [
       f('hello.sh',         PUB_HELLO,               380),
       f('about.txt',        `${P}/about.txt`,        700),
       x('gasoline-linux-amd64', 28_456_912,
-        'https://github.com/Jabberwocky238/gasoline/releases/download/Beta0.1.0/gasoline-linux-amd64'),
+        'https://raw.githubusercontent.com/Jabberwocky238/gasoline/main/bin/gasoline-linux-amd64'),
       x('gasoline-linux-arm64', 28_102_432,
-        'https://github.com/Jabberwocky238/gasoline/releases/download/Beta0.1.0/gasoline-linux-arm64'),
+        'https://raw.githubusercontent.com/Jabberwocky238/gasoline/main/bin/gasoline-linux-arm64'),
       d('transport', [
         f('udp.md',  `${P}/transport/udp.md`,  620),
         f('tcp.md',  `${P}/transport/tcp.md`,  520),
