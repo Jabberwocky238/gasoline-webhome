@@ -64,9 +64,13 @@ export type VfsErrno =
   | 'EINVAL'
 
 export class VfsError extends Error {
-  constructor(public code: VfsErrno, public path: string, msg?: string) {
+  code: VfsErrno
+  path: string
+  constructor(code: VfsErrno, path: string, msg?: string) {
     super(msg ?? `${code}: ${path}`)
     this.name = 'VfsError'
+    this.code = code
+    this.path = path
   }
 }
 
@@ -351,7 +355,7 @@ function resolveParent(path: string[]): { parent: VDir; name: string } {
   let node: VNode = ROOT
   for (const seg of parentPath) {
     if (node.kind !== 'dir') throw new VfsError('ENOTDIR', '/' + parentPath.join('/'))
-    const child = node.children.find((c) => c.name === seg)
+    const child: VNode | undefined = node.children.find((c) => c.name === seg)
     if (!child) throw new VfsError('ENOENT', '/' + parentPath.join('/'))
     node = child
   }

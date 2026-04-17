@@ -4,7 +4,9 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 
-import { makeShell, prompt, runCommand } from './commands'
+import { makeShell, prompt } from './shell'
+import { runForTerminal } from './registry'
+import './cmds' // register all builtins
 
 const NL = '\r\n'
 
@@ -107,23 +109,29 @@ export default function Terminal() {
       if (overshoot > 0) write(`\x1b[${overshoot}D`)
     }
 
-    const submitLine = () => {
+    let busy = false
+    const submitLine = async () => {
+      if (busy) return
+      busy = true
       write(NL)
       const cmd = line
       if (cmd.trim()) {
         history.push(cmd)
+        shell.history.push(cmd)
         if (history.length > 500) history.shift()
       }
       histIdx = -1
-      const result = runCommand(shell, cmd)
       line = ''
       cursor = 0
-      if (result.clear) {
-        term.clear()
-      } else if (result.output) {
-        writeLn(result.output)
+      try {
+        const out = await runForTerminal(shell, cmd)
+        if (out) writeLn(out)
+      } catch (e) {
+        writeLn(`\x1b[31m${(e as Error).message}\x1b[0m`)
+      } finally {
+        busy = false
+        write(prompt(shell))
       }
-      write(prompt(shell))
     }
 
     term.onData((data) => {
