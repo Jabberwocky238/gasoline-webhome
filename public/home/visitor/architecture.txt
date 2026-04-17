@@ -1,0 +1,30 @@
+Layered stack:
+
+  ┌──────────────────────────────────────────────┐
+  │  Client process                              │
+  │   OS TUN (L3)                                │
+  │    │ IP                                      │
+  │    ▼                                         │
+  │   tap.Device  ◀────ARP resolve───▶ ARPTable  │
+  │    │ L2 Eth frames                           │
+  │    ▼                                         │
+  │   transport.Conn  (AEAD: ChaCha20-Poly1305)  │
+  └──────────────────────────────────────────────┘
+                      │ UDP/TCP/TLS/QUIC
+                      ▼
+  ┌──────────────────────────────────────────────┐
+  │  Operator                                    │
+  │   listener (handshake → AEAD)                │
+  │    │                                         │
+  │    ▼                                         │
+  │   vxlan.Plane                                │
+  │    ├─ MACTable (local ports / remote peers)  │
+  │    ├─ Forward(vni, frame)                    │
+  │    └─ RxLoop: decap + learn source MAC       │
+  │        │                                     │
+  │        ▼ UDP 6678                            │
+  │   peer operators  (VXLAN-encapsulated)       │
+  └──────────────────────────────────────────────┘
+
+Key invariant: the operator data plane NEVER inspects inner IP.
+Forwarding is strictly (VNI, dst MAC) → local port | remote peer.

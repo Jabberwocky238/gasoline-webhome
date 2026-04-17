@@ -1,0 +1,7 @@
+# demo/client.yaml
+endpoint: operator.example.com:20000
+transport: quic
+auth: noauth
+vni: 200
+vmac: 02:aa:bb:cc:dd:01   # omit for a random locally-administered MAC
+tun-name: cilium_vxlan

@@ -1,0 +1,15 @@
+gasoline is a userspace VXLAN overlay that routes packets by
+(VNI, virtual-MAC) pairs — not by IP.  Clients join with a 24-bit
+VNI and a 6-byte VMAC (exactly like a real Ethernet NIC); operators
+run a MAC-learning data plane that forwards L2 frames between clients,
+optionally across multiple operators connected via UDP+VXLAN.
+
+Why?
+
+  • IP is a tenant-leaky key.  MAC+VNI cleanly isolates tenants.
+  • VXLAN wire format means you can drop real OVS/Linux kernel
+    VXLAN peers into the mesh without protocol translation.
+  • Userspace ARP keeps client logic portable across TUN/TAP, iOS,
+    Android, and anything that speaks L3 sockets.
+
+Status: dogfooding on a few VPSes across two continents.
