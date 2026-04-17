@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# This is a live terminal demo — every route is the same SPA. Crawl away.
+Disallow:
+
+Sitemap: https://gasoline.network/sitemap.xml
